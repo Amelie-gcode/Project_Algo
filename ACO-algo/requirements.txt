@@ -1,0 +1,6 @@
+numpy==1.26.4
+pandas==2.2.2
+networkx==3.2.1
+matplotlib==3.8.4
+vrplib==1.0.9
+scipy==1.11.4
