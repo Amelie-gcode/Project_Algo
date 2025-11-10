@@ -44,37 +44,59 @@ class AntColonyCVRP:
     # Main ACO loop
     # ------------------------------------------------------
     def run(self, verbose=True):
-        # Main ACO iterations
-        for it in range(1, self.max_iter + 1): # iterations
-            # Each ant constructs a solution
+        """
+        Main optimization loop for the Ant Colony Optimization (ACO) algorithm.
+
+        Each iteration consists of:
+        1. Multiple ants constructing feasible CVRP solutions independently.
+        2. Evaluating all ants and selecting the best one of this iteration.
+        3. (Optional) Improving the iterations best solution using local search.
+        4. Updating pheromones based on the improved best solution.
+        5. Tracking the global best solution found so far.
+
+        This version applies local search only to the *iteration-best* solution
+        (instead of every ant), which significantly reduces runtime while keeping
+        solution quality almost identical.
+        """
+
+        # Reset best solution before starting
+        self.best_cost = float("inf")
+        self.best_solution = None
+
+        # --- Main ACO loop ---
+        for it in range(1, self.max_iter + 1):
             iteration_best_cost = float("inf")
             iteration_best_sol = None
+            iteration_solutions = []
 
-            # Run all ants
+            # === (1) Each ant constructs a solution ===
             for _ in range(self.num_ants):
-                # Construct solution
                 solution, cost = self.construct_solution()
-                # Apply local search if enabled
-                if self.local_search:
-                    solution, cost = self.local_search_hill(solution, cost)
+                iteration_solutions.append((solution, cost))
 
-                # Update iteration best
-                if cost < iteration_best_cost:
-                    iteration_best_cost = cost
-                    iteration_best_sol = solution
+            # === (2) Select the best ant this iteration ===
+            iteration_best_sol, iteration_best_cost = min(iteration_solutions, key=lambda x: x[1])
 
-            # Update pheromones
+            # === (3) Apply local search *only to the iteration’s best ant* ===
+            if self.local_search:
+                improved_sol, improved_cost = self.local_search_hill(iteration_best_sol, iteration_best_cost)
+                if improved_cost < iteration_best_cost:
+                    iteration_best_sol, iteration_best_cost = improved_sol, improved_cost
+
+            # === (4) Update pheromones based on best solution ===
             self.update_pheromones(iteration_best_sol, iteration_best_cost)
 
-            # Update global best
+            # === (5) Update global best solution ===
             if iteration_best_cost < self.best_cost:
                 self.best_cost = iteration_best_cost
                 self.best_solution = iteration_best_sol
-            # Verbose output every 10% of iterations so that progress is visible and not too frequent when there are many iterations
+
+            # === (6) Verbose progress output ===
             if verbose and (it % max(1, self.max_iter // 10) == 0 or it == 1):
                 print(f"Iteration {it}/{self.max_iter} - Best: {self.best_cost:.2f}")
 
         return self.best_solution, self.best_cost
+
 
     # ------------------------------------------------------
     # Solution construction (each individual ant builds a route plan) and calculates its cost
@@ -134,7 +156,7 @@ class AntColonyCVRP:
     # ------------------------------------------------------
     # Local Search (Hybrid Hill Climbing)
     # ------------------------------------------------------
-    def local_search_hill(self, routes, total_cost, max_no_improve=100):
+    def local_search_hill(self, routes, total_cost, max_no_improve=30):
         """
         Simple hybrid local search that applies:
         - Intra-route 2-opt (reverses segments to shorten routes)

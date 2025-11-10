@@ -13,7 +13,7 @@ file_names = {
     "X-n200-k36": "/Users/alanale/Downloads/Vrp-Set-X/X/X-n200-k36.vrp"
 }
 
-instance_path = "/Users/alanale/Downloads/Vrp-Set-Solomon/C101.txt"
+instance_path = "/Users/alanale/Downloads/Vrp-Set-X/X/X-n106-k14.vrp"
 # you can change the instance by changing the instance_path to any of the file_names values above
 instance = CVRPInstance(instance_path)
 # prints a summary of the instance such as # of customers, # vehicles, capacity, and name of the instance
@@ -25,15 +25,16 @@ aco = AntColonyCVRP(
     demands=instance.demands,
     vehicle_capacity=instance.vehicle_capacity,
     num_vehicles=instance.num_vehicles,
-    alpha=1.0,        # ↓ less pheromone bias
-    beta=2.0,         # ↑ slightly more greedy to keep routes efficient
-    rho=0.1,         # ↑ faster evaporation → more diversity
-    Q=100.0,          # pheromone deposit factor
-    num_ants=20,      # ↑ more ants to explore 25-vehicle space
-    max_iter=10,      # ↑ allow more convergence
-    local_search=True, # enable local search
-    rng_seed=42 # for reproducibility
+    alpha=1.2,       # more pheromone influence (more exploitation)
+    beta=2.0,        # slightly less greedy, more exploration
+    rho=0.35,        # faster evaporation to escape local optima
+    Q=100.0,
+    num_ants=40,     # larger colony = better exploration
+    max_iter=40,     # allow enough convergence
+    local_search=True,
+    rng_seed=42
 )
+
 
 # Measure execution time
 start = time.time()
