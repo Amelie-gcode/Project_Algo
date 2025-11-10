@@ -20,9 +20,9 @@ def get_vrptw_instance(file_name):
     """
 
     instance_path = os.path.join("..", "instances", file_name)
-    data = vrplib.read_instance(instance_path, instance_format="solomon")
+    data = vrplib.read_instance(instance_path, instance_format="vrplib")
 
-    solution_path = os.path.join("..", "instances", file_name.replace(".txt", ".sol"))
+    solution_path = os.path.join("..", "instances", file_name.replace(".vrp", ".sol"))
     solution = vrplib.read_solution(solution_path)
 
     return data, solution
