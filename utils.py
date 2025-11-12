@@ -23,7 +23,8 @@ def display_results(filepath, best_cost, elapsed_time):
         "A-n60-k9": 1354,
         "X-n101-k25": 27591,
         "X-n100-k10": 27591, 
-        "X-n106-k14": 26362
+        "X-n106-k14": 26362,
+        "X-n200-k36": 58578
     }
 
     opt_cost = OPTIMUMS.get(instance_name, None)

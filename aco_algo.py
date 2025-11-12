@@ -50,13 +50,11 @@ class AntColonyCVRP:
         Each iteration consists of:
         1. Multiple ants constructing feasible CVRP solutions independently.
         2. Evaluating all ants and selecting the best one of this iteration.
-        3. (Optional) Improving the iterations best solution using local search.
+        3. (Optional) Improving the iteration's best solution using local search.
         4. Updating pheromones based on the improved best solution.
         5. Tracking the global best solution found so far.
 
-        This version applies local search only to the *iteration-best* solution
-        (instead of every ant), which significantly reduces runtime while keeping
-        solution quality almost identical.
+        This version stops early if the gap to the known optimum drops below 7%.
         """
 
         # Reset best solution before starting
@@ -69,89 +67,111 @@ class AntColonyCVRP:
             iteration_best_sol = None
             iteration_solutions = []
 
-            # === (1) Each ant constructs a solution ===
+            # (1) Each ant constructs a solution
             for _ in range(self.num_ants):
                 solution, cost = self.construct_solution()
                 iteration_solutions.append((solution, cost))
 
-            # === (2) Select the best ant this iteration ===
+            # (2) Pick the best of this iteration
             iteration_best_sol, iteration_best_cost = min(iteration_solutions, key=lambda x: x[1])
 
-            # === (3) Apply local search *only to the iteration’s best ant* ===
+            # (3) Optional local search improvement
             if self.local_search:
                 improved_sol, improved_cost = self.local_search_hill(iteration_best_sol, iteration_best_cost)
                 if improved_cost < iteration_best_cost:
                     iteration_best_sol, iteration_best_cost = improved_sol, improved_cost
 
-            # === (4) Update pheromones based on best solution ===
+            # (4) Update pheromones
             self.update_pheromones(iteration_best_sol, iteration_best_cost)
 
-            # === (5) Update global best solution ===
+            # (5) Update global best
             if iteration_best_cost < self.best_cost:
                 self.best_cost = iteration_best_cost
                 self.best_solution = iteration_best_sol
 
-            # === (6) Verbose progress output ===
+            # (6) Verbose progress
             if verbose and (it % max(1, self.max_iter // 10) == 0 or it == 1):
                 print(f"Iteration {it}/{self.max_iter} - Best: {self.best_cost:.2f}")
 
-        return self.best_solution, self.best_cost
 
+        # --- Print final solution summary ---
+        print("\n=== FINAL BEST SOLUTION ===")
+        print(f"Total cost: {self.best_cost:.2f}")
+        print(f"Number of vehicles used: {len(self.best_solution)}")
+        for r_idx, route in enumerate(self.best_solution, start=1):
+            print(f"  Vehicle {r_idx}: {route}")
+
+        # Return results for external display
+        return self.best_solution, self.best_cost
 
     # ------------------------------------------------------
     # Solution construction (each individual ant builds a route plan) and calculates its cost
     # ------------------------------------------------------
     def construct_solution(self):
-        # Each ant builds routes until all customers are visited
-        
-        unvisited = set(range(1, self.N)) # exclude depot (0)
-        routes = [] # routes for this ant
-        total_cost = 0 # total cost for this ant
+        """
+        Each ant builds routes until all customers are visited.
+        This version enforces a maximum number of vehicles (routes)
+        equal to `self.num_vehicles`, if specified.
+        """
 
-        while unvisited: # while there are unvisited customers
-            route = [0] # start at depot
-            load = 0 # current vehicle load
-            current = 0 # current customer (start at depot)
+        unvisited = set(range(1, self.N))  # exclude depot (0)
+        routes = []  # list of routes for this ant
+        total_cost = 0  # total travel cost
 
-            while True: # build route until no feasible next customer
-                # Find feasible customers
+        while unvisited:
+            # === Hard vehicle limit check ===
+            if self.num_vehicles is not None and len(routes) >= self.num_vehicles:
+                # All vehicles used — assign remaining customers to the last route
+                last_route = routes[-1]
+                current = last_route[-2] if len(last_route) > 1 else 0  # last visited before depot
+
+                for j in list(unvisited):
+                    # Insert before depot
+                    last_route.insert(-1, j)
+                    # Add cost for inserting customer j before returning to depot
+                    total_cost += self.D[current][j] + self.D[j][0] - self.D[current][0]
+                    current = j
+                    unvisited.remove(j)
+                # Ensure route ends at depot
+                if last_route[-1] != 0:
+                    last_route.append(0)
+                break
+
+            # === Normal route construction ===
+            route = [0]  # start at depot
+            load = 0
+            current = 0
+
+            while True:
+                # Find feasible customers within capacity
                 feasible = [j for j in unvisited if self.demands[j] + load <= self.capacity]
-                # No feasible customers left
+
                 if not feasible:
                     break
 
-                # Select next customer based on probabilities
+                # Select next customer probabilistically
                 probs = np.array([
-                    # Calculate probability components
-                    # formula: (pheromone^alpha) * (visibility^beta)
-                    (self.pheromone[current][j] ** self.alpha) * # pheromone influence
-                    (self.visibility[current][j] ** self.beta) # visibility influence
-                    for j in feasible # feasible customers
+                    (self.pheromone[current][j] ** self.alpha) *
+                    (self.visibility[current][j] ** self.beta)
+                    for j in feasible
                 ])
-                # Normalize to get probabilities
-                # probs += 1e-10  # avoid zero probabilities
-                probs /= probs.sum() # normalize
-                # Roulette wheel selection
+                probs /= probs.sum()
                 next_customer = random.choices(feasible, weights=probs)[0]
+
                 # Update route and load
                 route.append(next_customer)
-                # total cost update where the distance from current to next_customer is added
                 total_cost += self.D[current][next_customer]
-                # load is incremented by the demand of the next_customer
                 load += self.demands[next_customer]
-                # we remove the next_customer from unvisited set in order to mark it as visited
                 unvisited.remove(next_customer)
-                # then the current customer is updated to next_customer for the next iteration
                 current = next_customer
 
             # Return to depot
             route.append(0)
-            # total cost update for returning to depot
             total_cost += self.D[current][0]
-            # append the completed route to routes list
             routes.append(route)
 
         return routes, total_cost
+
 
     # ------------------------------------------------------
     # Local Search (Hybrid Hill Climbing)

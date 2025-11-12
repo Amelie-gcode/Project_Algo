@@ -19,20 +19,22 @@ instance = CVRPInstance(instance_path)
 # prints a summary of the instance such as # of customers, # vehicles, capacity, and name of the instance
 instance.summary()
 
+# TODO : if found gap <7% (maybe 6.9%) then just stop and save the solution
+
 # Run ACO by creating an instance of AntColonyCVRP and providing parameters tuned for larger instances
 aco = AntColonyCVRP(
     dist_matrix=instance.dist_matrix,
     demands=instance.demands,
     vehicle_capacity=instance.vehicle_capacity,
     num_vehicles=instance.num_vehicles,
-    alpha=1.2,       # more pheromone influence (more exploitation)
-    beta=2.0,        # slightly less greedy, more exploration
-    rho=0.35,        # faster evaporation to escape local optima
-    Q=100.0,
-    num_ants=40,     # larger colony = better exploration
-    max_iter=40,     # allow enough convergence
+    alpha=1.5,        # ↑ slightly more pheromone influence (more exploitation)
+    beta=3.0,         # ↔ strong distance bias for efficiency
+    rho=0.30,         # ↓ slower evaporation for better memory
+    Q=100.0,          # ↔ keep same deposit scaling
+    num_ants=90,      # ↔ good diversity for 25 vehicles
+    max_iter=250,      # ↑ allow longer convergence
     local_search=True,
-    rng_seed=42
+    rng_seed=41
 )
 
 
