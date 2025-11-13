@@ -19,7 +19,7 @@ from scipy.spatial import distance_matrix
 #   possibly an `edge_weight` matrix). `data_set_solution` may contain a
 #   reference (best-known) solution used for comparison.
 # ---------------------------------------------------------------------------
-INSTANCE_PATH = r"C:\Users\ameli\Documents\A3\Algo_combi_opti\Project_Algo\instances\M\M-n101-k10.vrp"
+INSTANCE_PATH = r"C:\Users\ameli\Documents\A3\Algo_combi_opti\Project_Algo\instances\M\M-n121-k7.vrp"
 data_set, data_set_solution = get_vrptw_instance(INSTANCE_PATH)
 BEST_SOLUTION = data_set_solution['routes']
 
@@ -183,10 +183,3 @@ def is_route_feasable(route):
     if sum(demand[k] for k in route) <= capacity:
         return True
 
-
-print('===== Clarke and wright ======')
-sol = clark_and_wright()
-print(total_travel_distance(sol))
-BEST_SOLUTION_VALUE= total_travel_distance(BEST_SOLUTION)
-gap =  100 * (total_travel_distance(sol)-BEST_SOLUTION_VALUE) / BEST_SOLUTION_VALUE 
-print ("gap cw :", gap)

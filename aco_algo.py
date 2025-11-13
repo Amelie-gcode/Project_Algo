@@ -116,7 +116,13 @@ class AntColonyCVRP:
                     self.cw_edges.add((b, a))
             # Add a seed to pheromone matrix on those edges
             for (a, b) in self.cw_edges:
-                self.pheromone[a][b] += self.seed_strength
+                # Guard against mismatched instances / indexing: only apply if
+                # the indices exist in the pheromone matrix
+                if 0 <= a < self.N and 0 <= b < self.N:
+                    self.pheromone[a][b] += self.seed_strength
+                else:
+                    if verbose:
+                        print(f"Warning: skipping C&W edge {(a,b)} — outside pheromone matrix size {self.N}")
             # Clip pheromones to configured bounds to avoid numerical blowup
             np.clip(self.pheromone, self.tau_min, self.tau_max, out=self.pheromone)
 
@@ -426,9 +432,13 @@ class AntColonyCVRP:
             for route in self.cw_solution:
                 for i in range(len(route) - 1):
                     a, b = route[i], route[i + 1]
-                    # renforce les arcs du C&W
-                    self.pheromone[a][b] += 800.0
-                    self.pheromone[b][a] += 800.0
+                    # Reinforce C&W arcs but guard against out-of-bounds indices
+                    if 0 <= a < self.N and 0 <= b < self.N:
+                        self.pheromone[a][b] += 500.0
+                        self.pheromone[b][a] += 500.0
+                    else:
+                        # optional verbose message when skipping invalid arc
+                        pass
 
         # Clip pheromones to keep values in numerical bounds
         np.clip(self.pheromone, self.tau_min, self.tau_max, out=self.pheromone)
