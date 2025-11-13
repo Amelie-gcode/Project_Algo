@@ -13,8 +13,27 @@ def display_results(filepath, best_cost, elapsed_time):
     instance_name = os.path.splitext(os.path.basename(filepath))[0]
 
     # --- Known optima for benchmark instances ---
+<<<<<<< HEAD
     
     opt_cost=total_travel_distance(BEST_SOLUTION)
+=======
+    OPTIMUMS = {
+        # CVRP / VRPTW Solomon & Augerat examples
+        "C101": 828.94,       
+        "A-n32-k5": 784,
+        "A-n33-k5": 661,
+        "A-n34-k5": 778,
+        "A-n39-k5": 822,
+        "A-n44-k6": 937,
+        "A-n60-k9": 1354,
+        "X-n101-k25": 27591,
+        "X-n100-k10": 27591, 
+        "X-n106-k14": 26362,
+        "X-n200-k36": 58578
+    }
+
+    opt_cost = OPTIMUMS.get(instance_name, None)
+>>>>>>> 06d608017f64da1e65498df8f03ad1c71b1b8392
     gap = None
 
     if opt_cost:

@@ -21,6 +21,8 @@ instance = CVRPInstance(INSTANCE_PATH)
 # prints a summary of the instance such as # of customers, # vehicles, capacity, and name of the instance
 instance.summary()
 
+# TODO : if found gap <7% (maybe 6.9%) then just stop and save the solution
+
 # Run ACO by creating an instance of AntColonyCVRP and providing parameters tuned for larger instances
 aco_params = {
         "dist_matrix": EDGE_WEIGHT,
