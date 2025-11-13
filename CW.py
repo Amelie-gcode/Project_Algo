@@ -19,7 +19,7 @@ from scipy.spatial import distance_matrix
 #   possibly an `edge_weight` matrix). `data_set_solution` may contain a
 #   reference (best-known) solution used for comparison.
 # ---------------------------------------------------------------------------
-INSTANCE_PATH = r"C:\Users\ameli\Documents\A3\Algo_combi_opti\Project_Algo\instances\M\M-n200-k16.vrp"
+INSTANCE_PATH = r"C:\Users\ameli\Documents\A3\Algo_combi_opti\Project_Algo\instances\M\M-n101-k10.vrp"
 data_set, data_set_solution = get_vrptw_instance(INSTANCE_PATH)
 BEST_SOLUTION = data_set_solution['routes']
 
