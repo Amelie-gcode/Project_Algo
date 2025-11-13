@@ -1,5 +1,6 @@
 import os
 import time
+from CW import * 
 
 def display_results(filepath, best_cost, elapsed_time):
     """
@@ -12,21 +13,8 @@ def display_results(filepath, best_cost, elapsed_time):
     instance_name = os.path.splitext(os.path.basename(filepath))[0]
 
     # --- Known optima for benchmark instances ---
-    OPTIMUMS = {
-        # CVRP / VRPTW Solomon & Augerat examples
-        "C101": 828.94,       
-        "A-n32-k5": 784,
-        "A-n33-k5": 661,
-        "A-n34-k5": 778,
-        "A-n39-k5": 822,
-        "A-n44-k6": 937,
-        "A-n60-k9": 1354,
-        "X-n101-k25": 27591,
-        "X-n100-k10": 27591, 
-        "X-n106-k14": 26362
-    }
-
-    opt_cost = OPTIMUMS.get(instance_name, None)
+    
+    opt_cost=total_travel_distance(BEST_SOLUTION)
     gap = None
 
     if opt_cost:

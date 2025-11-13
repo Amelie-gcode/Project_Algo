@@ -1,6 +1,7 @@
 import numpy as np
 import random
 from copy import deepcopy
+from CW import *
 
 class AntColonyCVRP:
     """
@@ -9,19 +10,27 @@ class AntColonyCVRP:
     """
 
     def __init__(self, dist_matrix, demands, vehicle_capacity, num_vehicles=None,
-                 alpha=1.0, beta=2.0, rho=0.5, Q=100, num_ants=10, max_iter=100,
-                 local_search=True, rng_seed=None):
-        self.D = dist_matrix
+                 alpha=1.0, beta=2.0, rho=0.2, Q=50, num_ants=20, max_iter=100,
+                 local_search=True, rng_seed=None,
+                 # new tuning params to focus on clarke and wright
+                 seed_strength=500.0,
+                 elitist_weight=5.0,
+                 start_with_cw_frac=0.2,
+                 candidate_list_size=20,
+                 tau_min=1e-4,
+                 tau_max=1e4):
+        # Ensure a float numpy array for safe numeric operations
+        self.D = np.array(dist_matrix, dtype=float)
         self.demands = demands
         self.capacity = vehicle_capacity
         self.num_vehicles = num_vehicles
-        self.alpha = alpha # influence of pheromone
-        self.beta = beta # influence of visibility (1/distance)
-        self.rho = rho # pheromone evaporation rate
-        self.Q = Q # pheromone deposit factor
-        self.num_ants = num_ants # of ants per iteration
-        self.max_iter = max_iter # max iterations
-        self.local_search = local_search # enable local search
+        self.alpha = alpha  # influence of pheromone
+        self.beta = beta  # influence of visibility (1/distance)
+        self.rho = rho  # pheromone evaporation rate
+        self.Q = Q  # pheromone deposit factor
+        self.num_ants = num_ants  # of ants per iteration
+        self.max_iter = max_iter  # max iterations
+        self.local_search = local_search  # enable local search
 
         # Random seed for reproducibility
         if rng_seed is not None:
@@ -30,11 +39,41 @@ class AntColonyCVRP:
 
         # Initialize pheromone and visibility matrices
         self.N = len(self.D)
+        # initial pheromone levels (will be re-weighted/seeded in run())
         self.pheromone = np.ones((self.N, self.N))
-        np.fill_diagonal(self.D, np.inf)
-        # Avoid division by zero
-        self.visibility = 1 / self.D
-        self.visibility[np.isinf(self.visibility)] = 1e-6
+
+        # Build a safe distance matrix for numerical operations
+        D_safe = self.D.copy()
+        # Diagonal should not be used as neighbor distances
+        np.fill_diagonal(D_safe, np.inf)
+
+        # Visibility = 1 / distance but protect against zeros / non-finite
+        self.visibility = np.zeros_like(D_safe)
+        finite_mask = np.isfinite(D_safe) & (D_safe > 1e-12)
+        self.visibility[finite_mask] = 1.0 / D_safe[finite_mask]
+        # Small non-zero visibility for invalid/unreachable pairs
+        self.visibility[~finite_mask] = 1e-6
+
+        # Clarke & Wright guidance
+        # seed_strength: additive pheromone on edges of cw_solution at init
+        self.seed_strength = seed_strength
+        # elitist factor for extra pheromone deposit from global best
+        self.elitist_weight = elitist_weight
+        # fraction of ants that use cw-guided bias during construction
+        self.start_with_cw_frac = start_with_cw_frac
+
+        # Candidate lists (nearest neighbors) to focus construction
+        self.candidate_list_size = min(candidate_list_size, self.N - 1)
+        # For candidate lists, avoid treating zero or invalid distances as nearest
+        D_for_sort = D_safe.copy()
+        # replace any tiny/zero distances (off-diagonal) with large value so they are not picked as near neighbors
+        small_mask = (D_for_sort <= 1e-12) | ~np.isfinite(D_for_sort)
+        D_for_sort[small_mask] = np.inf
+        self.candidates = [np.argsort(D_for_sort[i])[:self.candidate_list_size].tolist() for i in range(self.N)]
+
+        # pheromone bounds to avoid search stagnation
+        self.tau_min = tau_min
+        self.tau_max = tau_max
 
         # Best solution tracking
         self.best_cost = float("inf")
@@ -64,6 +103,25 @@ class AntColonyCVRP:
         self.best_solution = None
 
         # --- Main ACO loop ---
+        # --- (0) Optional: initialize / seed pheromones using Clarke & Wright solution ---
+        if self.cw_solution is not None:
+            if verbose:
+                print("Seeding pheromone with Clarke & Wright solution...")
+            # Build edge set for quick lookup
+            self.cw_edges = set()
+            for route in self.cw_solution:
+                # ensure route includes depot indicators if needed
+                r = route if route[0] == 0 else [0] + route + [0]
+                for i in range(len(r) - 1):
+                    a, b = r[i], r[i + 1]
+                    self.cw_edges.add((a, b))
+                    self.cw_edges.add((b, a))
+            # Add a seed to pheromone matrix on those edges
+            for (a, b) in self.cw_edges:
+                self.pheromone[a][b] += self.seed_strength
+            # Clip pheromones to configured bounds to avoid numerical blowup
+            np.clip(self.pheromone, self.tau_min, self.tau_max, out=self.pheromone)
+
         for it in range(1, self.max_iter + 1):
             iteration_best_cost = float("inf")
             iteration_best_sol = None
@@ -94,6 +152,15 @@ class AntColonyCVRP:
             # === (6) Verbose progress output ===
             if verbose and (it % max(1, self.max_iter // 10) == 0 or it == 1):
                 print(f"Iteration {it}/{self.max_iter} - Best: {self.best_cost:.2f}")
+        
+        # === (7) Final fallback: ensure we return at least C&W solution ===
+        if self.cw_solution is not None:
+            cw_cost = total_travel_distance(self.cw_solution)
+            if self.best_cost > cw_cost:
+                if verbose:
+                    print(f"ACO ({self.best_cost:.2f}) did not beat C&W ({cw_cost:.2f}). Returning C&W solution.")
+                self.best_solution = self.cw_solution
+                self.best_cost = cw_cost
 
         return self.best_solution, self.best_cost
 
@@ -101,9 +168,8 @@ class AntColonyCVRP:
     # ------------------------------------------------------
     # Solution construction (each individual ant builds a route plan) and calculates its cost
     # ------------------------------------------------------
-    def construct_solution(self):
-        # Each ant builds routes until all customers are visited
-        
+    def construct_solution(self, cw_bias_frac=0.0):
+        """Build a solution with optional bias towards C&W edges."""
         unvisited = set(range(1, self.N)) # exclude depot (0)
         routes = [] # routes for this ant
         total_cost = 0 # total cost for this ant
@@ -120,38 +186,51 @@ class AntColonyCVRP:
                 if not feasible:
                     break
 
-                # Select next customer based on probabilities
+                # Restrict to candidate list (nearest neighbors)
+                cand = feasible
+                cand_neighbors = [c for c in self.candidates[current] if c in feasible]
+                if len(cand_neighbors) > 0:
+                    cand = cand_neighbors + [f for f in feasible if f not in cand_neighbors]
+
+                # Calculate selection probabilities
                 probs = np.array([
-                    # Calculate probability components
-                    # formula: (pheromone^alpha) * (visibility^beta)
-                    (self.pheromone[current][j] ** self.alpha) * # pheromone influence
-                    (self.visibility[current][j] ** self.beta) # visibility influence
-                    for j in feasible # feasible customers
+                    (self.pheromone[current][j] ** self.alpha) *
+                    (self.visibility[current][j] ** self.beta)
+                    for j in cand
                 ])
-                # Normalize to get probabilities
-                # probs += 1e-10  # avoid zero probabilities
-                probs /= probs.sum() # normalize
+                
+                probs_sum = probs.sum()
+                if probs_sum <= 0:
+                    probs = np.ones(len(probs)) / len(probs)
+                else:
+                    probs /= probs_sum
+
+                # C&W bias: amplify probs of edges in C&W solution
+                if hasattr(self, 'cw_edges') and cw_bias_frac > 0 and random.random() < cw_bias_frac:
+                    bias = np.array([5.0 if (current, j) in self.cw_edges else 1.0 for j in cand])
+                    probs = probs * bias
+                    probs_sum = probs.sum()
+                    if probs_sum > 0:
+                        probs = probs / probs_sum
+
                 # Roulette wheel selection
-                next_customer = random.choices(feasible, weights=probs)[0]
-                # Update route and load
+                next_customer = random.choices(cand, weights=probs)[0]
                 route.append(next_customer)
-                # total cost update where the distance from current to next_customer is added
                 total_cost += self.D[current][next_customer]
-                # load is incremented by the demand of the next_customer
                 load += self.demands[next_customer]
-                # we remove the next_customer from unvisited set in order to mark it as visited
                 unvisited.remove(next_customer)
-                # then the current customer is updated to next_customer for the next iteration
                 current = next_customer
 
             # Return to depot
             route.append(0)
-            # total cost update for returning to depot
             total_cost += self.D[current][0]
-            # append the completed route to routes list
             routes.append(route)
 
         return routes, total_cost
+
+    def construct_solution_with_bias(self, cw_bias_frac=0.0):
+        """Alias for construct_solution to support adaptive bias."""
+        return self.construct_solution(cw_bias_frac)
 
     # ------------------------------------------------------
     # Local Search (Hybrid Hill Climbing)
@@ -326,5 +405,16 @@ class AntColonyCVRP:
                 # Increase pheromone on both directions (symmetric problem)
                 self.pheromone[a][b] += deposit
                 self.pheromone[b][a] += deposit
+
+        if hasattr(self, "cw_solution") and self.cw_solution is not None:
+            for route in self.cw_solution:
+                for i in range(len(route) - 1):
+                    a, b = route[i], route[i + 1]
+                    # renforce les arcs du C&W
+                    self.pheromone[a][b] += 800.0
+                    self.pheromone[b][a] += 800.0
+
+        # Clip pheromones to keep values in numerical bounds
+        np.clip(self.pheromone, self.tau_min, self.tau_max, out=self.pheromone)
 
 
